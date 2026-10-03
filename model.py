@@ -137,8 +137,13 @@ def scatter_mean_to_nodes(edge_features, dst, num_nodes):
 
     pass
 
-# Step 8 - scatter_max_to_nodes (not yet solved)
-# TODO: implement
+# Step 8 - scatter_max_to_nodes
+def scatter_max_to_nodes(edge_features, dst, num_nodes):
+    # TODO: Scatter-max edge features onto destination nodes (elementwise max).
+    out = edge_features.new_full((num_nodes, edge_features.size(1)), float('-inf'))
+    out.index_reduce_(0, dst, edge_features, reduce="amax")
+    return out
+    pass
 
 # Step 9 - compute_messages (not yet solved)
 # TODO: implement
