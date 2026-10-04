@@ -228,8 +228,30 @@ def message_passing_layer(node_features, src, dst, message_fn, update_fn, aggr='
     return updated_features
     pass
 
-# Step 13 - stack_message_passing_layers (not yet solved)
-# TODO: implement
+# Step 13 - stack_message_passing_layers
+def stack_message_passing_layers(node_features, src, dst, layers, edge_attr=None):
+    """Apply a sequence of message-passing layer callables to produce deep node embeddings.
+
+    Args:
+        node_features: FloatTensor of shape (N, F).
+        src: LongTensor of shape (E,) source indices.
+        dst: LongTensor of shape (E,) destination indices.
+        layers: list of callables, each
+            layer(node_features, src, dst, edge_attr=None) -> Tensor (N, H_i).
+        edge_attr: optional FloatTensor of shape (E, Fe).
+
+    Returns:
+        embeddings: FloatTensor of shape (N, H), final layer output.
+        all_layer_outputs: list of FloatTensors, one per layer (N, H_i).
+    """
+    # TODO: Apply a sequence of MP layer callables; return final + intermediates
+    intermediate_outputs = [] #stack
+    current_features = node_features
+    for layer in layers:
+        current_features = layer(current_features, src, dst, edge_attr=edge_attr)
+        intermediate_outputs.append(current_features)
+    return current_features, intermediate_outputs
+    pass
 
 # Step 14 - gcn_renormalize_adjacency (not yet solved)
 # TODO: implement
