@@ -1179,8 +1179,30 @@ def cross_entropy_loss(logits, targets):
 #     correct_class_log_probs = log_probs[torch.arange(M), targets]
 #     return -correct_class_log_probs.mean()
 
-# Step 38 - mse_loss (not yet solved)
-# TODO: implement
+# Step 38 - mse_loss
+import torch
+import torch.nn.functional as F
+
+def mse_loss(predictions, targets):
+    """
+    Computes the mean squared error between continuous predictions and targets.
+    
+    Args:
+        predictions (Tensor): Predicted values of shape [B] or [B, 1].
+        targets (Tensor): True target values of shape [B] or [B, 1].
+        
+    Returns:
+        Tensor: 0-dimensional scalar float tensor representing the MSE.
+    """
+    # 1. Flatten both tensors to 1-D to prevent silent broadcasting bugs
+    preds_flat = predictions.view(-1)
+    targets_flat = targets.view(-1)
+    
+    # 2. Compute the mean squared error
+    # You could also do: loss = torch.mean((preds_flat - targets_flat) ** 2)
+    loss = F.mse_loss(preds_flat, targets_flat, reduction='mean')
+    
+    return loss
 
 # Step 39 - accuracy_metric (not yet solved)
 # TODO: implement
