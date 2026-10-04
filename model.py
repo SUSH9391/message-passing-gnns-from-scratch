@@ -565,8 +565,43 @@ def gat_head_forward(node_features, src, dst, weight, attn_src, attn_dst, bias=N
     
     return output_features, coefficients
 
-# Step 22 - merge_gat_heads (not yet solved)
-# TODO: implement
+# Step 22 - merge_gat_heads
+import torch
+
+def merge_gat_heads(heads, mode='concat'):
+    """
+    Merges multi-head GAT outputs into one node-feature tensor.
+    
+    Args:
+        heads (list/tuple or Tensor): List of tensors [N, F] OR a stacked tensor [H, N, F].
+        mode (str): 'concat' for concatenation [N, H*F] or 'mean' for averaging [N, F].
+        
+    Returns:
+        Tensor: Merged node features of shape [N, H*F] or [N, F].
+    """
+    if mode not in ['concat', 'mean']:
+        raise ValueError(f"Invalid mode '{mode}'. Must be 'concat' or 'mean'.")
+        
+    if isinstance(heads, (list, tuple)):
+        if mode == 'concat':
+            # Concatenate along the feature dimension
+            return torch.cat(heads, dim=-1)
+        elif mode == 'mean':
+            # Stack into [H, N, F] then mean over the heads dimension (dim=0)
+            return torch.stack(heads, dim=0).mean(dim=0)
+            
+    elif isinstance(heads, torch.Tensor):
+        # heads is expected to be [H, N, F]
+        if mode == 'concat':
+            H, N, F = heads.shape
+            # Transpose to [N, H, F], then flatten the last two dimensions to [N, H*F]
+            return heads.transpose(0, 1).reshape(N, H * F)
+        elif mode == 'mean':
+            # Mean over the heads dimension (dim=0)
+            return heads.mean(dim=0)
+            
+    else:
+        raise TypeError("heads must be a list, tuple, or torch.Tensor.")
 
 # Step 23 - gat_layer_forward (not yet solved)
 # TODO: implement
