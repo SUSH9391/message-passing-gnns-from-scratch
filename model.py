@@ -866,8 +866,29 @@ def global_mean_max_pool(node_features, batch_index, num_graphs=None):
     
     return combined_features
 
-# Step 30 - node_classification_head (not yet solved)
-# TODO: implement
+# Step 30 - node_classification_head
+import torch
+
+def node_classification_head(node_embeddings, weight, bias=None):
+    """
+    Maps per-node embeddings to class logits with a linear layer.
+    
+    Args:
+        node_embeddings (Tensor): Final node embeddings of shape (N, H).
+        weight (Tensor): Classification weight matrix of shape (H, C).
+        bias (Tensor, optional): Bias vector of shape (C).
+        
+    Returns:
+        Tensor: Class logits of shape (N, C).
+    """
+    # 1. Compute the matrix product: (N, H) @ (H, C) -> (N, C)
+    logits = torch.matmul(node_embeddings, weight)
+    
+    # 2. Optionally add the bias
+    if bias is not None:
+        logits = logits + bias
+        
+    return logits
 
 # Step 31 - graph_regression_head (not yet solved)
 # TODO: implement
