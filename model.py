@@ -840,8 +840,31 @@ def global_max_pool(node_features, batch_index, num_graphs=None):
     
     return max_features
 
-# Step 29 - global_mean_max_pool (not yet solved)
-# TODO: implement
+# Step 29 - global_mean_max_pool
+import torch
+
+def global_mean_max_pool(node_features, batch_index, num_graphs=None):
+    """
+    Produces a richer graph-level embedding by concatenating mean and max pools.
+    
+    Args:
+        node_features (Tensor): Node feature matrix of shape (N, F).
+        batch_index (LongTensor): Tensor of shape (N,) mapping nodes to graph IDs.
+        num_graphs (int, optional): Total number of graphs (B).
+        
+    Returns:
+        Tensor: Concatenated graph-level features of shape (B, 2F).
+    """
+    # 1. Compute the mean pool (Shape: [B, F])
+    mean_pooled = global_mean_pool(node_features, batch_index, num_graphs)
+    
+    # 2. Compute the max pool (Shape: [B, F])
+    max_pooled = global_max_pool(node_features, batch_index, num_graphs)
+    
+    # 3. Concatenate along the feature dimension (Shape: [B, 2F])
+    combined_features = torch.cat([mean_pooled, max_pooled], dim=-1)
+    
+    return combined_features
 
 # Step 30 - node_classification_head (not yet solved)
 # TODO: implement
