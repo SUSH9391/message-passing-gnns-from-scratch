@@ -1442,8 +1442,38 @@ def representation_similarity(features_a, features_b, eps=1e-8):
     # 3. Average over all nodes and extract the Python float
     return cosine_sims.mean().item()
 
-# Step 45 - oversmoothing_diagnostic (not yet solved)
-# TODO: implement
+# Step 45 - oversmoothing_diagnostic
+def oversmoothing_diagnostic(layers_features):
+    """
+    Diagnoses oversmoothing by measuring representation similarity between consecutive layers.
+    
+    Args:
+        layers_features (list of Tensor): List of node-feature tensors (one per layer).
+        
+    Returns:
+        dict: Contains 'pairwise_similarities' (list of floats) and 'mean_similarity' (float).
+    """
+    # If there are fewer than 2 layers, we cannot compare consecutive pairs
+    if len(layers_features) < 2:
+        return {
+            'pairwise_similarities': [],
+            'mean_similarity': 0.0
+        }
+        
+    pairwise_similarities = []
+    
+    # Compare each consecutive pair of layers
+    for i in range(len(layers_features) - 1):
+        sim = representation_similarity(layers_features[i], layers_features[i+1])
+        pairwise_similarities.append(sim)
+        
+    # Compute the average similarity across all pairs
+    mean_similarity = sum(pairwise_similarities) / len(pairwise_similarities)
+    
+    return {
+        'pairwise_similarities': pairwise_similarities,
+        'mean_similarity': mean_similarity
+    }
 
 # Step 46 - mpnn_gnn_experiment (not yet solved)
 # TODO: implement
