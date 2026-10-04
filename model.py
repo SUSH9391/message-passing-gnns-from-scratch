@@ -995,8 +995,59 @@ def build_node_classification_dataset(num_graphs, num_nodes, num_classes, p_in, 
         
     return dataset
 
-# Step 34 - generate_molecule_like_graph (not yet solved)
-# TODO: implement
+# Step 34 - generate_molecule_like_graph
+import torch
+
+def generate_molecule_like_graph(num_nodes, num_node_features, edge_prob, seed=None):
+    """
+    Synthesizes one molecule-like graph for graph-level regression tasks.
+    
+    Args:
+        num_nodes (int): Number of atoms (nodes) in the molecule.
+        num_node_features (int): Dimensionality of the atom features.
+        edge_prob (float): Probability of a bond (edge) existing between any two atoms.
+        seed (int, optional): Random seed for reproducibility.
+        
+    Returns:
+        dict: Contains 'x' (features), 'edge_index' (COO topology), and 'y' (regression target).
+    """
+    if seed is not None:
+        torch.manual_seed(seed)
+        
+    # 1. Generate node features (i.i.d. standard normal)
+    x = torch.randn(num_nodes, num_node_features)
+    
+    # 2. Generate random edges
+    # We sample the upper triangle to avoid self-loops and duplicate edges
+    rand_tensor = torch.rand(num_nodes, num_nodes)
+    adj = rand_tensor < edge_prob
+    adj = torch.triu(adj, diagonal=1)
+    
+    # Extract endpoints to COO format
+    src, dst = torch.where(adj)
+    
+    # Add reverse edges to make it truly undirected
+    edge_index = torch.stack([
+        torch.cat([src, dst]),
+        torch.cat([dst, src])
+    ], dim=0)
+    
+    # 3. Compute regression target 'y'
+    # Use bincount on the source nodes to get the exact degree of every node
+    # minlength ensures nodes with 0 edges still get a degree of 0 in the tensor
+    deg = torch.bincount(edge_index[0], minlength=num_nodes).float()
+    
+    # Calculate the mean feature value for each node
+    mean_x = x.mean(dim=-1)
+    
+    # Calculate the final graph-level scalar target y
+    y = (deg * mean_x).mean()
+    
+    return {
+        'x': x,
+        'edge_index': edge_index,
+        'y': y
+    }
 
 # Step 35 - build_graph_regression_dataset (not yet solved)
 # TODO: implement
