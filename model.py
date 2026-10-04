@@ -1049,8 +1049,44 @@ def generate_molecule_like_graph(num_nodes, num_node_features, edge_prob, seed=N
         'y': y
     }
 
-# Step 35 - build_graph_regression_dataset (not yet solved)
-# TODO: implement
+# Step 35 - build_graph_regression_dataset
+import torch
+
+def build_graph_regression_dataset(num_graphs, num_nodes_range, num_node_features, edge_prob=0.3, seed=0):
+    """
+    Builds a list of molecule-like graphs for graph-level regression.
+    
+    Args:
+        num_graphs (int): Total number of graphs to generate.
+        num_nodes_range (tuple): An inclusive range (lo, hi) for the number of nodes per graph.
+        num_node_features (int): Dimensionality of the node features.
+        edge_prob (float, optional): Probability of an edge existing. Defaults to 0.3.
+        seed (int, optional): Base random seed. Defaults to 0.
+        
+    Returns:
+        list of dict: A list of graph dictionaries, each containing 'x', 'edge_index', and 'y'.
+    """
+    lo, hi = num_nodes_range
+    dataset = []
+    
+    for i in range(num_graphs):
+        # 1. Cycle through node counts deterministically
+        num_nodes = lo + (i % (hi - lo + 1))
+        
+        # 2. Derive a distinct per-graph seed
+        graph_seed = seed + i
+        
+        # 3. Generate the molecule-like graph
+        graph = generate_molecule_like_graph(
+            num_nodes=num_nodes,
+            num_node_features=num_node_features,
+            edge_prob=edge_prob,
+            seed=graph_seed
+        )
+        
+        dataset.append(graph)
+        
+    return dataset
 
 # Step 36 - collate_graph_batch (not yet solved)
 # TODO: implement
