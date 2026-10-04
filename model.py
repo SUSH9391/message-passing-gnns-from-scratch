@@ -955,8 +955,45 @@ def generate_sbm_graph(num_nodes, num_classes, p_in, p_out, feature_dim, seed=No
         'num_nodes': num_nodes
     }
 
-# Step 33 - build_node_classification_dataset (not yet solved)
-# TODO: implement
+# Step 33 - build_node_classification_dataset
+import torch
+
+def build_node_classification_dataset(num_graphs, num_nodes, num_classes, p_in, p_out, feature_dim, seed=None):
+    """
+    Constructs a list of synthetic SBM graphs ready for node-classification training.
+    
+    Args:
+        num_graphs (int): Number of graphs to generate for the dataset.
+        num_nodes (int): Total number of nodes per graph.
+        num_classes (int): Number of communities (classes).
+        p_in (float): Probability of an edge inside a community.
+        p_out (float): Probability of an edge across communities.
+        feature_dim (int): Dimensionality of the node features.
+        seed (int, optional): Base random seed for reproducibility.
+        
+    Returns:
+        list of dict: A list of graph dictionaries in generation order.
+    """
+    dataset = []
+    
+    for i in range(num_graphs):
+        # Derive a distinct per-graph seed so graphs differ, 
+        # but the overall dataset remains reproducible!
+        graph_seed = seed + i if seed is not None else None
+        
+        # Generate one SBM graph
+        graph = generate_sbm_graph(
+            num_nodes=num_nodes,
+            num_classes=num_classes,
+            p_in=p_in,
+            p_out=p_out,
+            feature_dim=feature_dim,
+            seed=graph_seed
+        )
+        
+        dataset.append(graph)
+        
+    return dataset
 
 # Step 34 - generate_molecule_like_graph (not yet solved)
 # TODO: implement
