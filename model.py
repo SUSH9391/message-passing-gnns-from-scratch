@@ -1475,6 +1475,1332 @@ def oversmoothing_diagnostic(layers_features):
         'mean_similarity': mean_similarity
     }
 
-# Step 46 - mpnn_gnn_experiment (not yet solved)
-# TODO: implement
+# Step 46 - mpnn_gnn_experiment
+import torch
+import torch.nn.functional as F
+
+
+# ============================================================
+# 1. SBM GRAPH GENERATION
+# ============================================================
+
+def generate_sbm_graph(
+    num_nodes,
+    num_classes,
+    p_in,
+    p_out,
+    feature_dim,
+    seed=None
+):
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    # Node features
+    node_features = torch.randn(
+        num_nodes,
+        feature_dim,
+        dtype=torch.float32
+    )
+
+    # Node labels in contiguous communities
+    node_labels = torch.zeros(
+        num_nodes,
+        dtype=torch.long
+    )
+
+    for c in range(num_classes):
+        start = c * num_nodes // num_classes
+        end = (c + 1) * num_nodes // num_classes
+        node_labels[start:end] = c
+
+    # Generate undirected edges
+    src = []
+    dst = []
+
+    for i in range(num_nodes):
+        for j in range(i + 1, num_nodes):
+
+            if node_labels[i] == node_labels[j]:
+                prob = p_in
+            else:
+                prob = p_out
+
+            if torch.rand(1).item() < prob:
+
+                src.extend([i, j])
+                dst.extend([j, i])
+
+    if len(src) == 0:
+        edge_index = torch.empty(
+            (2, 0),
+            dtype=torch.long
+        )
+    else:
+        edge_index = torch.tensor(
+            [src, dst],
+            dtype=torch.long
+        )
+
+    return {
+        "node_features": node_features,
+        "edge_index": edge_index,
+        "node_labels": node_labels,
+        "num_nodes": num_nodes
+    }
+
+
+# ============================================================
+# 2. GCN PARAMETER INITIALIZATION
+# ============================================================
+
+def init_gcn_parameters(
+    in_dim,
+    out_dim,
+    with_bias=True,
+    seed=None
+):
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    bound = (6.0 / (in_dim + out_dim)) ** 0.5
+
+    weight = torch.empty(
+        in_dim,
+        out_dim,
+        dtype=torch.float32
+    )
+
+    weight.uniform_(-bound, bound)
+
+    # IMPORTANT:
+    # Make the parameter a leaf tensor that tracks gradients.
+    weight.requires_grad_(True)
+
+    params = {
+        "weight": weight
+    }
+
+    if with_bias:
+        bias = torch.zeros(
+            out_dim,
+            dtype=torch.float32,
+            requires_grad=True
+        )
+
+        params["bias"] = bias
+
+    return params
+
+
+# ============================================================
+# 3. GCN ADJACENCY RENORMALIZATION
+# ============================================================
+
+def gcn_renormalize_adjacency(
+    src,
+    dst,
+    num_nodes
+):
+    # Add self-loops
+    self_nodes = torch.arange(
+        num_nodes,
+        dtype=torch.long,
+        device=src.device
+    )
+
+    src_loop = torch.cat(
+        [src, self_nodes]
+    )
+
+    dst_loop = torch.cat(
+        [dst, self_nodes]
+    )
+
+    # Degree
+    degree = torch.zeros(
+        num_nodes,
+        dtype=torch.float32,
+        device=src.device
+    )
+
+    degree.scatter_add_(
+        0,
+        dst_loop,
+        torch.ones_like(
+            dst_loop,
+            dtype=torch.float32
+        )
+    )
+
+    # D^(-1/2)
+    degree_inv_sqrt = degree.clamp(
+        min=1e-12
+    ).pow(-0.5)
+
+    # Symmetric normalization:
+    #
+    # D^(-1/2) A D^(-1/2)
+    #
+    edge_weights = (
+        degree_inv_sqrt[src_loop]
+        * degree_inv_sqrt[dst_loop]
+    )
+
+    return (
+        src_loop,
+        dst_loop,
+        edge_weights
+    )
+
+
+# ============================================================
+# 4. GCN LINEAR TRANSFORMATION
+# ============================================================
+
+def gcn_linear_transform(
+    node_features,
+    weight,
+    bias=None
+):
+    output = torch.matmul(
+        node_features,
+        weight
+    )
+
+    if bias is not None:
+        output = output + bias
+
+    return output
+
+
+# ============================================================
+# 5. GENERIC MESSAGE PASSING
+# ============================================================
+
+def message_passing_layer(
+    node_features,
+    src,
+    dst,
+    message_fn,
+    update_fn,
+    aggr="sum",
+    edge_attr=None
+):
+    num_nodes = node_features.shape[0]
+
+    messages = message_fn(
+        node_features[src],
+        node_features[dst],
+        edge_attr
+    )
+
+    aggregated = torch.zeros(
+        (
+            num_nodes,
+            messages.shape[-1]
+        ),
+        dtype=messages.dtype,
+        device=messages.device
+    )
+
+    if aggr == "sum":
+
+        aggregated.index_add_(
+            0,
+            dst,
+            messages
+        )
+
+    elif aggr == "mean":
+
+        aggregated.index_add_(
+            0,
+            dst,
+            messages
+        )
+
+        counts = torch.zeros(
+            num_nodes,
+            dtype=messages.dtype,
+            device=messages.device
+        )
+
+        counts.index_add_(
+            0,
+            dst,
+            torch.ones_like(
+                dst,
+                dtype=messages.dtype
+            )
+        )
+
+        aggregated = (
+            aggregated
+            / counts.clamp(min=1).unsqueeze(-1)
+        )
+
+    else:
+        raise ValueError(
+            "Unsupported aggregation: "
+            + str(aggr)
+        )
+
+    return update_fn(
+        node_features,
+        aggregated
+    )
+
+
+# ============================================================
+# 6. GCN LAYER
+# ============================================================
+
+def gcn_layer_forward(
+    node_features,
+    src,
+    dst,
+    weight,
+    bias=None,
+    num_nodes=None,
+    activation=None
+):
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+
+    # Normalize adjacency
+    src_loop, dst_loop, edge_weights = (
+        gcn_renormalize_adjacency(
+            src,
+            dst,
+            num_nodes
+        )
+    )
+
+    # XW + b
+    transformed_features = (
+        gcn_linear_transform(
+            node_features,
+            weight,
+            bias
+        )
+    )
+
+    # Message function
+    def message_fn(
+        x_src,
+        x_dst,
+        weights
+    ):
+        return (
+            x_src
+            * weights.unsqueeze(-1)
+        )
+
+    # Update
+    def update_fn(
+        node_feats,
+        aggregated
+    ):
+        return aggregated
+
+    out = message_passing_layer(
+        transformed_features,
+        src_loop,
+        dst_loop,
+        message_fn=message_fn,
+        update_fn=update_fn,
+        aggr="sum",
+        edge_attr=edge_weights
+    )
+
+    if activation is not None:
+        out = activation(out)
+
+    return out
+
+
+# ============================================================
+# 7. GCN STACK
+# ============================================================
+
+def gcn_stack_forward(
+    node_features,
+    src,
+    dst,
+    param_list,
+    activations=None,
+    num_nodes=None
+):
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+
+    if activations is None:
+        activations = [
+            None
+        ] * len(param_list)
+
+    current_features = node_features
+
+    all_layer_outputs = []
+
+    for i, params in enumerate(param_list):
+
+        current_features = gcn_layer_forward(
+            node_features=current_features,
+            src=src,
+            dst=dst,
+            weight=params["weight"],
+            bias=params.get("bias"),
+            num_nodes=num_nodes,
+            activation=activations[i]
+        )
+
+        all_layer_outputs.append(
+            current_features
+        )
+
+    return (
+        current_features,
+        all_layer_outputs
+    )
+
+
+# ============================================================
+# 8. CLASSIFICATION HEAD
+# ============================================================
+
+def node_classification_head(
+    node_embeddings,
+    weight,
+    bias=None
+):
+    logits = torch.matmul(
+        node_embeddings,
+        weight
+    )
+
+    if bias is not None:
+        logits = logits + bias
+
+    return logits
+
+
+# ============================================================
+# 9. GAT PARAMETER INITIALIZATION
+# ============================================================
+
+def init_gat_parameters(
+    in_dim,
+    out_dim,
+    num_heads,
+    with_bias=True,
+    seed=None
+):
+    if seed is not None:
+        torch.manual_seed(seed)
+
+    bound_w = (
+        6.0 / (in_dim + out_dim)
+    ) ** 0.5
+
+    bound_a = (
+        6.0 / (out_dim + 1)
+    ) ** 0.5
+
+    param_list = []
+
+    for _ in range(num_heads):
+
+        weight = torch.empty(
+            in_dim,
+            out_dim,
+            dtype=torch.float32
+        )
+
+        weight.uniform_(
+            -bound_w,
+            bound_w
+        )
+
+        weight.requires_grad_(True)
+
+        attn_src = torch.empty(
+            out_dim,
+            dtype=torch.float32
+        )
+
+        attn_src.uniform_(
+            -bound_a,
+            bound_a
+        )
+
+        attn_src.requires_grad_(True)
+
+        attn_dst = torch.empty(
+            out_dim,
+            dtype=torch.float32
+        )
+
+        attn_dst.uniform_(
+            -bound_a,
+            bound_a
+        )
+
+        attn_dst.requires_grad_(True)
+
+        params = {
+            "weight": weight,
+            "attn_src": attn_src,
+            "attn_dst": attn_dst
+        }
+
+        if with_bias:
+
+            bias = torch.zeros(
+                out_dim,
+                dtype=torch.float32,
+                requires_grad=True
+            )
+
+            params["bias"] = bias
+
+        param_list.append(params)
+
+    return param_list
+
+
+# ============================================================
+# 10. GAT LAYER
+# ============================================================
+
+def gat_layer_forward(
+    node_features,
+    src,
+    dst,
+    layer_params,
+    merge_mode="concat",
+    activation=None,
+    num_nodes=None
+):
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+
+    head_outputs = []
+
+    for params in layer_params:
+
+        weight = params["weight"]
+        attn_src = params["attn_src"]
+        attn_dst = params["attn_dst"]
+        bias = params.get("bias")
+
+        # Linear transformation
+        h = torch.matmul(
+            node_features,
+            weight
+        )
+
+        if bias is not None:
+            h = h + bias
+
+        # Attention scores
+        src_score = torch.sum(
+            h * attn_src,
+            dim=-1
+        )
+
+        dst_score = torch.sum(
+            h * attn_dst,
+            dim=-1
+        )
+
+        edge_scores = (
+            src_score[src]
+            + dst_score[dst]
+        )
+
+        # LeakyReLU attention
+        edge_scores = F.leaky_relu(
+            edge_scores,
+            negative_slope=0.2
+        )
+
+        # ----------------------------------------------------
+        # Edge-wise softmax
+        # ----------------------------------------------------
+
+        attention = torch.zeros_like(
+            edge_scores
+        )
+
+        for node in range(num_nodes):
+
+            mask = dst == node
+
+            if mask.any():
+
+                attention[mask] = torch.softmax(
+                    edge_scores[mask],
+                    dim=0
+                )
+
+        # ----------------------------------------------------
+        # Message passing
+        # ----------------------------------------------------
+
+        messages = (
+            h[src]
+            * attention.unsqueeze(-1)
+        )
+
+        aggregated = torch.zeros(
+            (
+                num_nodes,
+                h.shape[-1]
+            ),
+            dtype=h.dtype,
+            device=h.device
+        )
+
+        aggregated.index_add_(
+            0,
+            dst,
+            messages
+        )
+
+        # Add self representation
+        aggregated = aggregated + h
+
+        head_outputs.append(
+            aggregated
+        )
+
+    # --------------------------------------------------------
+    # Merge heads
+    # --------------------------------------------------------
+
+    if merge_mode == "concat":
+
+        output = torch.cat(
+            head_outputs,
+            dim=-1
+        )
+
+    elif merge_mode == "mean":
+
+        output = torch.stack(
+            head_outputs,
+            dim=0
+        ).mean(dim=0)
+
+    else:
+
+        raise ValueError(
+            "merge_mode must be "
+            "'concat' or 'mean'"
+        )
+
+    if activation is not None:
+        output = activation(output)
+
+    return output
+
+
+# ============================================================
+# 11. GAT STACK
+# ============================================================
+
+def gat_stack_forward(
+    node_features,
+    src,
+    dst,
+    layer_param_list,
+    merge_modes=None,
+    activations=None,
+    num_nodes=None
+):
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+
+    num_layers = len(
+        layer_param_list
+    )
+
+    if merge_modes is None:
+
+        merge_modes = (
+            ["concat"] * num_layers
+        )
+
+    if activations is None:
+
+        activations = (
+            [None] * num_layers
+        )
+
+    current_features = node_features
+
+    all_layers_out = []
+
+    for i in range(num_layers):
+
+        current_features = gat_layer_forward(
+            node_features=current_features,
+            src=src,
+            dst=dst,
+            layer_params=layer_param_list[i],
+            merge_mode=merge_modes[i],
+            activation=activations[i],
+            num_nodes=num_nodes
+        )
+
+        all_layers_out.append(
+            current_features
+        )
+
+    return (
+        current_features,
+        all_layers_out
+    )
+
+
+# ============================================================
+# 12. OVERSMOOTHING DIAGNOSTIC
+# ============================================================
+
+def representation_similarity(
+    x,
+    y
+):
+    """
+    Mean cosine similarity between corresponding
+    node representations.
+    """
+
+    # Make dimensions compatible if necessary
+    min_dim = min(
+        x.shape[-1],
+        y.shape[-1]
+    )
+
+    x = x[:, :min_dim]
+    y = y[:, :min_dim]
+
+    x_norm = F.normalize(
+        x,
+        p=2,
+        dim=-1
+    )
+
+    y_norm = F.normalize(
+        y,
+        p=2,
+        dim=-1
+    )
+
+    similarity = (
+        x_norm * y_norm
+    ).sum(dim=-1)
+
+    return similarity.mean().item()
+
+
+def oversmoothing_diagnostic(
+    layers_features
+):
+    if len(layers_features) < 2:
+
+        return {
+            "pairwise_similarities": [],
+            "mean_similarity": 0.0
+        }
+
+    pairwise_similarities = []
+
+    for i in range(
+        len(layers_features) - 1
+    ):
+
+        sim = representation_similarity(
+            layers_features[i],
+            layers_features[i + 1]
+        )
+
+        pairwise_similarities.append(
+            sim
+        )
+
+    mean_similarity = (
+        sum(pairwise_similarities)
+        / len(pairwise_similarities)
+    )
+
+    return {
+        "pairwise_similarities":
+            pairwise_similarities,
+        "mean_similarity":
+            mean_similarity
+    }
+
+
+# ============================================================
+# 13. TRAIN NODE CLASSIFIER
+# ============================================================
+
+def train_node_classifier(
+    params,
+    dataset,
+    forward_fn,
+    num_epochs=100,
+    lr=0.01,
+    mask_key="train_mask"
+):
+    x = dataset["x"]
+    edge_index = dataset["edge_index"]
+    y = dataset["y"]
+
+    mask = dataset.get(
+        mask_key,
+        torch.ones(
+            x.shape[0],
+            dtype=torch.bool
+        )
+    )
+
+    history = []
+
+    # Make absolutely sure every parameter
+    # participates in autograd.
+    for param in params.values():
+
+        if not param.requires_grad:
+            param.requires_grad_(True)
+
+    for epoch in range(num_epochs):
+
+        # Clear gradients
+        for param in params.values():
+
+            if param.grad is not None:
+                param.grad.zero_()
+
+        # Forward
+        logits = forward_fn(
+            params,
+            x,
+            edge_index
+        )
+
+        masked_logits = logits[mask]
+        masked_y = y[mask]
+
+        # Cross entropy
+        loss = F.cross_entropy(
+            masked_logits,
+            masked_y
+        )
+
+        # Accuracy
+        predictions = torch.argmax(
+            masked_logits,
+            dim=-1
+        )
+
+        accuracy = (
+            predictions == masked_y
+        ).float().mean().item()
+
+        # ----------------------------------------------------
+        # Critical gradient check
+        # ----------------------------------------------------
+
+        if not loss.requires_grad:
+
+            raise RuntimeError(
+                "Loss does not require gradients. "
+                "Check that model parameters have "
+                "requires_grad=True."
+            )
+
+        # Backpropagation
+        loss.backward()
+
+        # SGD
+        with torch.no_grad():
+
+            for param in params.values():
+
+                if param.grad is not None:
+
+                    param -= (
+                        lr * param.grad
+                    )
+
+        history.append({
+            "loss": float(
+                loss.item()
+            ),
+            "accuracy": float(
+                accuracy
+            )
+        })
+
+    return {
+        "history": history,
+        "params": params
+    }
+
+
+# ============================================================
+# 14. COMPLETE MPNN EXPERIMENT
+# ============================================================
+
+def mpnn_gnn_experiment(
+    num_nodes=32,
+    num_features=8,
+    num_classes=2,
+    num_layers=3,
+    hidden_dim=16,
+    num_epochs=6,
+    lr=0.05,
+    seed=0
+):
+
+    # ========================================================
+    # Seed - PyTorch ONLY
+    # ========================================================
+
+    torch.manual_seed(seed)
+
+    # ========================================================
+    # Generate SBM graph
+    # ========================================================
+
+    sbm_data = generate_sbm_graph(
+        num_nodes=num_nodes,
+        num_classes=num_classes,
+        p_in=0.5,
+        p_out=0.1,
+        feature_dim=num_features,
+        seed=seed
+    )
+
+    # ========================================================
+    # Node features
+    #
+    # This implements the fix you requested.
+    # ========================================================
+
+    node_features = (
+        sbm_data["node_features"]
+        .clone()
+        .detach()
+        .requires_grad_(True)
+    )
+
+    edge_index = sbm_data[
+        "edge_index"
+    ]
+
+    node_labels = sbm_data[
+        "node_labels"
+    ]
+
+    # ========================================================
+    # Train mask: exactly N // 2 nodes
+    # ========================================================
+
+    torch.manual_seed(
+        seed + 1
+    )
+
+    train_mask = torch.zeros(
+        num_nodes,
+        dtype=torch.bool
+    )
+
+    permutation = torch.randperm(
+        num_nodes
+    )
+
+    train_mask[
+        permutation[:num_nodes // 2]
+    ] = True
+
+    # ========================================================
+    # Dataset
+    # ========================================================
+
+    dataset = {
+        "x": node_features,
+        "edge_index": edge_index,
+        "y": node_labels,
+        "train_mask": train_mask
+    }
+
+    # ========================================================
+    # GCN PARAMETER INITIALIZATION
+    # ========================================================
+
+    gcn_layer_params = []
+
+    for layer_idx in range(
+        num_layers
+    ):
+
+        in_dim = (
+            num_features
+            if layer_idx == 0
+            else hidden_dim
+        )
+
+        out_dim = hidden_dim
+
+        params = init_gcn_parameters(
+            in_dim=in_dim,
+            out_dim=out_dim,
+            with_bias=True,
+            seed=seed + 10 + layer_idx
+        )
+
+        gcn_layer_params.append(
+            params
+        )
+
+    # Flatten GCN parameters
+    gcn_params = {}
+
+    for layer_idx, params in enumerate(
+        gcn_layer_params
+    ):
+
+        gcn_params[
+            f"layer_{layer_idx}_weight"
+        ] = params["weight"]
+
+        gcn_params[
+            f"layer_{layer_idx}_bias"
+        ] = params["bias"]
+
+    # GCN classifier
+    gcn_classifier = init_gcn_parameters(
+        in_dim=hidden_dim,
+        out_dim=num_classes,
+        with_bias=True,
+        seed=seed + 100
+    )
+
+    gcn_params[
+        "classifier_weight"
+    ] = gcn_classifier["weight"]
+
+    gcn_params[
+        "classifier_bias"
+    ] = gcn_classifier["bias"]
+
+    # ========================================================
+    # GCN FORWARD
+    # ========================================================
+
+    def gcn_forward(
+        params,
+        x,
+        edge_index
+    ):
+
+        layers = []
+
+        for layer_idx in range(
+            num_layers
+        ):
+
+            layers.append({
+                "weight":
+                    params[
+                        f"layer_{layer_idx}_weight"
+                    ],
+
+                "bias":
+                    params[
+                        f"layer_{layer_idx}_bias"
+                    ]
+            })
+
+        embeddings, layer_outputs = (
+            gcn_stack_forward(
+                node_features=x,
+                src=edge_index[0],
+                dst=edge_index[1],
+                param_list=layers,
+                activations=[
+                    F.relu
+                ] * num_layers,
+                num_nodes=x.shape[0]
+            )
+        )
+
+        gcn_forward.layer_outputs = (
+            layer_outputs
+        )
+
+        logits = node_classification_head(
+            node_embeddings=embeddings,
+            weight=params[
+                "classifier_weight"
+            ],
+            bias=params[
+                "classifier_bias"
+            ]
+        )
+
+        return logits
+
+    # ========================================================
+    # TRAIN GCN
+    # ========================================================
+
+    gcn_result = train_node_classifier(
+        params=gcn_params,
+        dataset=dataset,
+        forward_fn=gcn_forward,
+        num_epochs=num_epochs,
+        lr=lr,
+        mask_key="train_mask"
+    )
+
+    # Final GCN representations
+    with torch.no_grad():
+
+        gcn_forward(
+            gcn_result["params"],
+            node_features,
+            edge_index
+        )
+
+    gcn_oversmoothing = (
+        oversmoothing_diagnostic(
+            gcn_forward.layer_outputs
+        )
+    )
+
+    # ========================================================
+    # GAT PARAMETERS
+    #
+    # SINGLE HEAD
+    # ========================================================
+
+    num_heads = 1
+
+    gat_layer_params = []
+
+    for layer_idx in range(
+        num_layers
+    ):
+
+        in_dim = (
+            num_features
+            if layer_idx == 0
+            else hidden_dim
+        )
+
+        out_dim = hidden_dim
+
+        heads = init_gat_parameters(
+            in_dim=in_dim,
+            out_dim=out_dim,
+            num_heads=num_heads,
+            with_bias=True,
+            seed=seed + 200 + layer_idx
+        )
+
+        gat_layer_params.append(
+            heads
+        )
+
+    # Flatten GAT parameters
+    gat_params = {}
+
+    for layer_idx, heads in enumerate(
+        gat_layer_params
+    ):
+
+        # Exactly one head
+        params = heads[0]
+
+        prefix = (
+            f"layer_{layer_idx}_head_0"
+        )
+
+        gat_params[
+            f"{prefix}_weight"
+        ] = params["weight"]
+
+        gat_params[
+            f"{prefix}_attn_src"
+        ] = params["attn_src"]
+
+        gat_params[
+            f"{prefix}_attn_dst"
+        ] = params["attn_dst"]
+
+        gat_params[
+            f"{prefix}_bias"
+        ] = params["bias"]
+
+    # GAT classifier
+    gat_classifier = init_gcn_parameters(
+        in_dim=hidden_dim,
+        out_dim=num_classes,
+        with_bias=True,
+        seed=seed + 300
+    )
+
+    gat_params[
+        "classifier_weight"
+    ] = gat_classifier["weight"]
+
+    gat_params[
+        "classifier_bias"
+    ] = gat_classifier["bias"]
+
+    # ========================================================
+    # GAT FORWARD
+    # ========================================================
+
+    def gat_forward(
+        params,
+        x,
+        edge_index
+    ):
+
+        layers = []
+
+        for layer_idx in range(
+            num_layers
+        ):
+
+            prefix = (
+                f"layer_{layer_idx}_head_0"
+            )
+
+            head = {
+                "weight":
+                    params[
+                        f"{prefix}_weight"
+                    ],
+
+                "attn_src":
+                    params[
+                        f"{prefix}_attn_src"
+                    ],
+
+                "attn_dst":
+                    params[
+                        f"{prefix}_attn_dst"
+                    ],
+
+                "bias":
+                    params[
+                        f"{prefix}_bias"
+                    ]
+            }
+
+            # Single head
+            layers.append([
+                head
+            ])
+
+        # Single-head GAT + concat
+        #
+        # Since there is only one head,
+        # concat preserves hidden_dim.
+        embeddings, layer_outputs = (
+            gat_stack_forward(
+                node_features=x,
+                src=edge_index[0],
+                dst=edge_index[1],
+                layer_param_list=layers,
+                merge_modes=[
+                    "concat"
+                ] * num_layers,
+                activations=[
+                    F.relu
+                ] * num_layers,
+                num_nodes=x.shape[0]
+            )
+        )
+
+        gat_forward.layer_outputs = (
+            layer_outputs
+        )
+
+        logits = node_classification_head(
+            node_embeddings=embeddings,
+            weight=params[
+                "classifier_weight"
+            ],
+            bias=params[
+                "classifier_bias"
+            ]
+        )
+
+        return logits
+
+    # ========================================================
+    # TRAIN GAT
+    # ========================================================
+
+    gat_result = train_node_classifier(
+        params=gat_params,
+        dataset=dataset,
+        forward_fn=gat_forward,
+        num_epochs=num_epochs,
+        lr=lr,
+        mask_key="train_mask"
+    )
+
+    # Final GAT representations
+    with torch.no_grad():
+
+        gat_forward(
+            gat_result["params"],
+            node_features,
+            edge_index
+        )
+
+    gat_oversmoothing = (
+        oversmoothing_diagnostic(
+            gat_forward.layer_outputs
+        )
+    )
+
+    # ========================================================
+    # FINAL RESULT
+    # ========================================================
+
+    return {
+        "gcn": {
+            "history": gcn_result[
+                "history"
+            ],
+
+            "oversmoothing":
+                gcn_oversmoothing
+        },
+
+        "gat": {
+            "history": gat_result[
+                "history"
+            ],
+
+            "oversmoothing":
+                gat_oversmoothing
+        },
+
+        "dataset_sizes": {
+            "N": int(num_nodes),
+            "E": int(edge_index.shape[1]),
+            "C": int(num_classes)
+        }
+    }
 
