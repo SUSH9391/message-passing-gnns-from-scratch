@@ -603,8 +603,57 @@ def merge_gat_heads(heads, mode='concat'):
     else:
         raise TypeError("heads must be a list, tuple, or torch.Tensor.")
 
-# Step 23 - gat_layer_forward (not yet solved)
-# TODO: implement
+# Step 23 - gat_layer_forward
+import torch
+
+def gat_layer_forward(node_features, src, dst, param_list, merge_mode='concat', activation=None, num_nodes=None):
+    """
+    Executes one full multi-head Graph Attention (GAT) layer over a COO graph.
+    
+    Args:
+        node_features (Tensor): Node feature matrix of shape (N, Fin).
+        src (LongTensor): Source node indices of shape (E,).
+        dst (LongTensor): Destination node indices of shape (E,).
+        param_list (list of dict): Parameters for each head. Keys: 'weight', 'attn_src', 'attn_dst', ['bias'].
+        merge_mode (str): 'concat' for intermediate layers, 'mean' for final layer.
+        activation (callable, optional): Nonlinearity applied AFTER merging.
+        num_nodes (int, optional): Total number of nodes N.
+        
+    Returns:
+        tuple: (out, all_attn)
+            - out: Merged node tensor of shape (N, F_merged).
+            - all_attn: List of per-head attention coefficient tensors of shape (E,).
+    """
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+        
+    head_outputs = []
+    all_attn = []
+    
+    # 1. Run each independent attention head
+    for params in param_list:
+        weight = params['weight']
+        attn_src = params['attn_src']
+        attn_dst = params['attn_dst']
+        bias = params.get('bias', None)
+        
+        # Notice we do NOT pass the activation here; it happens after merging!
+        out_feat, attn_coeffs = gat_head_forward(
+            node_features, src, dst, weight, attn_src, attn_dst, 
+            bias=bias, activation=None, num_nodes=num_nodes
+        )
+        
+        head_outputs.append(out_feat)
+        all_attn.append(attn_coeffs)
+        
+    # 2. Merge the head outputs
+    merged_out = merge_gat_heads(head_outputs, mode=merge_mode)
+    
+    # 3. Apply the optional nonlinearity to the merged features
+    if activation is not None:
+        merged_out = activation(merged_out)
+        
+    return merged_out, all_attn
 
 # Step 24 - init_gat_parameters (not yet solved)
 # TODO: implement
