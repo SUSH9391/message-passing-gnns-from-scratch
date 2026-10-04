@@ -1303,8 +1303,58 @@ def gnn_train_step(params, batch, forward_fn, loss_fn, lr):
         'params': params
     }
 
-# Step 42 - train_node_classifier (not yet solved)
-# TODO: implement
+# Step 42 - train_node_classifier
+import torch
+import torch.nn.functional as F
+
+def train_node_classifier(params, dataset, forward_fn, num_epochs=100, lr=0.01, mask_key='train_mask'):
+    # Extract dataset components
+    x = dataset['x']
+    edge_index = dataset['edge_index']
+    y = dataset['y']
+    mask = dataset.get(mask_key, torch.ones(x.shape[0], dtype=torch.bool))
+    
+    history = []
+    
+    for epoch in range(num_epochs):
+        # Zero gradients if any exist
+        for param in params.values():
+            if param.grad is not None:
+                param.grad.zero_()
+                
+        # Forward pass passing both x and edge_index
+        logits = forward_fn(params, x, edge_index)
+        
+        # Mask the outputs and labels
+        masked_logits = logits[mask]
+        masked_y = y[mask]
+        
+        # If mask is empty, loss is zero
+        if masked_logits.shape[0] == 0:
+            loss = torch.tensor(0.0, requires_grad=True)
+            acc = 0.0
+        else:
+            loss = F.cross_entropy(masked_logits, masked_y)
+            preds = torch.argmax(masked_logits, dim=-1)
+            acc = (preds == masked_y).float().mean().item()
+            
+        # Backward pass and SGD update
+        loss.backward()
+        
+        with torch.no_grad():
+            for param in params.values():
+                if param.grad is not None:
+                    param -= lr * param.grad
+                    
+        history.append({
+            'loss': float(loss.item()),
+            'accuracy': float(acc)
+        })
+        
+    return {
+        'history': history,
+        'params': params
+    }
 
 # Step 43 - train_graph_regressor (not yet solved)
 # TODO: implement
