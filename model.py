@@ -890,8 +890,32 @@ def node_classification_head(node_embeddings, weight, bias=None):
         
     return logits
 
-# Step 31 - graph_regression_head (not yet solved)
-# TODO: implement
+# Step 31 - graph_regression_head
+import torch
+
+def graph_regression_head(graph_embeddings, weight, bias=None):
+    """
+    Maps pooled graph-level embeddings to regression outputs.
+    
+    Args:
+        graph_embeddings (Tensor): Pooled embeddings of shape [B, D].
+        weight (Tensor): Regression weights of shape [out_dim, D].
+        bias (Tensor, optional): Bias vector of shape [out_dim].
+        
+    Returns:
+        Tensor: Predictions of shape [B, out_dim].
+    """
+    # 1. Transpose weight to shape [D, out_dim]
+    weight_t = weight.t()
+    
+    # 2. Compute matrix product: [B, D] @ [D, out_dim] -> [B, out_dim]
+    predictions = torch.matmul(graph_embeddings, weight_t)
+    
+    # 3. Optionally add bias
+    if bias is not None:
+        predictions = predictions + bias
+        
+    return predictions
 
 # Step 32 - generate_sbm_graph (not yet solved)
 # TODO: implement
