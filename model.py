@@ -790,11 +790,55 @@ def global_mean_pool(node_features, batch_index, num_graphs=None):
     
     return mean_features
 
-# Step 27 - global_sum_pool (not yet solved)
-# TODO: implement
+# Step 27 - global_sum_pool
+import torch
 
-# Step 28 - global_max_pool (not yet solved)
-# TODO: implement
+def global_sum_pool(node_features, batch_index, num_graphs=None):
+    """
+    Sum-pools node features into one graph-level vector per graph in a batch.
+    
+    Args:
+        node_features (Tensor): Node feature matrix of shape (N, F).
+        batch_index (LongTensor): Tensor of shape (N,) mapping nodes to graph IDs.
+        num_graphs (int, optional): Total number of graphs (B).
+        
+    Returns:
+        Tensor: Graph-level features of shape (B, F).
+    """
+    # 1. Infer the number of graphs if not provided
+    if num_graphs is None:
+        num_graphs = int(batch_index.max().item()) + 1
+        
+    # 2. Sum the node features for each graph
+    # We reuse scatter_sum_to_nodes, treating batch_index as the "dst" nodes
+    summed_features = scatter_sum_to_nodes(node_features, batch_index, num_graphs)
+    
+    return summed_features
+
+# Step 28 - global_max_pool
+import torch
+
+def global_max_pool(node_features, batch_index, num_graphs=None):
+    """
+    Reduces node features into one max-pooled vector per graph in a batch.
+    
+    Args:
+        node_features (Tensor): Node feature matrix of shape (N, F).
+        batch_index (LongTensor): Tensor of shape (N,) mapping nodes to graph IDs.
+        num_graphs (int, optional): Total number of graphs (B).
+        
+    Returns:
+        Tensor: Graph-level features of shape (B, F).
+    """
+    # 1. Infer the number of graphs if not provided
+    if num_graphs is None:
+        num_graphs = int(batch_index.max().item()) + 1
+        
+    # 2. Extract the maximum node feature for each graph
+    # We reuse scatter_max_to_nodes, treating batch_index as the destination mapping
+    max_features = scatter_max_to_nodes(node_features, batch_index, num_graphs)
+    
+    return max_features
 
 # Step 29 - global_mean_max_pool (not yet solved)
 # TODO: implement
