@@ -507,8 +507,63 @@ def gat_masked_neighbor_softmax(logits, dst, num_nodes):
     
     return coefficients
 
-# Step 21 - gat_head_forward (not yet solved)
-# TODO: implement
+# Step 21 - gat_head_forward
+import torch
+
+def gat_head_forward(node_features, src, dst, weight, attn_src, attn_dst, bias=None, activation=None, num_nodes=None):
+    """
+    Forward pass of a single GAT attention head.
+    
+    Args:
+        node_features (Tensor): Node feature matrix of shape (N, Fin).
+        src (LongTensor): Source node indices of shape (E,).
+        dst (LongTensor): Destination node indices of shape (E,).
+        weight (Tensor): Shared linear weight matrix of shape (Fin, Fout).
+        attn_src (Tensor): Source attention vector of shape (Fout,).
+        attn_dst (Tensor): Destination attention vector of shape (Fout,).
+        bias (Tensor, optional): Bias vector of shape (Fout,).
+        activation (callable, optional): Activation function applied after bias.
+        num_nodes (int, optional): Total number of nodes N. Defaults to node_features.shape[0].
+        
+    Returns:
+        tuple: (output_features, attention_coefficients)
+            - output_features: Head output features of shape (N, Fout).
+            - attention_coefficients: Per-edge attention coefficients of shape (E,).
+    """
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+        
+    # 1. Compute attention logits and transformed node features
+    logits, transformed_nodes = gat_attention_logits(node_features, src, dst, attn_src, attn_dst, weight)
+    
+    # 2. Compute masked neighbor softmax to get attention coefficients
+    coefficients = gat_masked_neighbor_softmax(logits, dst, num_nodes)
+    
+    # 3. Define message function: weight source node features by attention coefficients
+    def gat_message_fn(x_src, x_dst, coeffs):
+        return x_src * coeffs.unsqueeze(-1)
+        
+    # 4. Define update function: add optional bias
+    def gat_update_fn(node_feats, aggregated):
+        out = aggregated
+        if bias is not None:
+            out = out + bias
+        if activation is not None:
+            out = activation(out)
+        return out
+        
+    # 5. Run message passing layer
+    output_features = message_passing_layer(
+        transformed_nodes,
+        src,
+        dst,
+        message_fn=gat_message_fn,
+        update_fn=gat_update_fn,
+        aggr='sum',
+        edge_attr=coefficients
+    )
+    
+    return output_features, coefficients
 
 # Step 22 - merge_gat_heads (not yet solved)
 # TODO: implement
