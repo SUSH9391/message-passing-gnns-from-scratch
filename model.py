@@ -1416,8 +1416,31 @@ def train_graph_regressor(params, dataset, forward_fn, num_epochs, lr, batch_siz
         
     return history, params
 
-# Step 44 - representation_similarity (not yet solved)
-# TODO: implement
+# Step 44 - representation_similarity
+import torch
+import torch.nn.functional as F
+
+def representation_similarity(features_a, features_b, eps=1e-8):
+    """
+    Measures how alike two node-feature matrices are using mean cosine similarity.
+    
+    Args:
+        features_a (Tensor): Node features of shape (N, D).
+        features_b (Tensor): Node features of shape (N, D).
+        eps (float): Stability epsilon for L2 normalization.
+        
+    Returns:
+        float: Mean cosine similarity as a Python float in [-1, 1].
+    """
+    # 1. L2-normalize each row of both matrices along the feature dimension
+    norm_a = F.normalize(features_a, p=2, dim=-1, eps=eps)
+    norm_b = F.normalize(features_b, p=2, dim=-1, eps=eps)
+    
+    # 2. Compute the per-node dot product of corresponding rows
+    cosine_sims = (norm_a * norm_b).sum(dim=-1)
+    
+    # 3. Average over all nodes and extract the Python float
+    return cosine_sims.mean().item()
 
 # Step 45 - oversmoothing_diagnostic (not yet solved)
 # TODO: implement
