@@ -1204,8 +1204,32 @@ def mse_loss(predictions, targets):
     
     return loss
 
-# Step 39 - accuracy_metric (not yet solved)
-# TODO: implement
+# Step 39 - accuracy_metric
+import torch
+
+def accuracy_metric(logits, targets):
+    """
+    Computes the fraction of examples whose predicted class matches the target.
+    
+    Args:
+        logits (Tensor): Class logits of shape (M, C).
+        targets (LongTensor): Integer class targets of shape (M,).
+        
+    Returns:
+        float: Accuracy in the range [0.0, 1.0].
+    """
+    # 1. Find the predicted class by taking the argmax over the class dimension
+    predictions = torch.argmax(logits, dim=-1)
+    
+    # 2. Compare predictions to the true targets to get a boolean tensor
+    correct = (predictions == targets)
+    
+    # 3. Compute the mean
+    # We must convert the boolean tensor to a float tensor before taking the mean
+    accuracy = correct.float().mean()
+    
+    # 4. Extract the standard Python float using .item()
+    return accuracy.item()
 
 # Step 40 - mae_metric (not yet solved)
 # TODO: implement
