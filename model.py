@@ -716,8 +716,46 @@ def init_gat_parameters(in_dim, out_dim, num_heads, with_bias=True, seed=None):
         
     return param_list
 
-# Step 25 - gat_stack_forward (not yet solved)
-# TODO: implement
+# Step 25 - gat_stack_forward
+def gat_stack_forward(node_features, src, dst, layer_param_list, merge_modes=None, activations=None, num_nodes=None):
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+        
+    num_layers = len(layer_param_list)
+    
+    # Set default merge_modes if none are provided
+    if merge_modes is None:
+        merge_modes = ['concat'] * (num_layers - 1) + ['mean']
+        
+    # Set default activations if none are provided
+    if activations is None:
+        activations = [None] * num_layers
+        
+    current_features = node_features
+    all_layers_out = []
+    
+    for i in range(num_layers):
+        # Run the multi-head GAT layer
+        out = gat_layer_forward(
+            current_features,
+            src,
+            dst,
+            layer_param_list[i],
+            merge_mode=merge_modes[i],
+            activation=activations[i],
+            num_nodes=num_nodes
+        )
+        
+        # In case gat_layer_forward returns a tuple of (features, attention_weights)
+        if isinstance(out, tuple):
+            current_features = out[0]
+        else:
+            current_features = out
+            
+        # The prompt asks to save the intermediate node embeddings, not attention weights
+        all_layers_out.append(current_features)
+        
+    return current_features, all_layers_out
 
 # Step 26 - global_mean_pool (not yet solved)
 # TODO: implement
