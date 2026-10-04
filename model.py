@@ -1258,8 +1258,50 @@ def mae_metric(predictions, targets):
     # 3. Extract the standard Python float using .item()
     return mae.item()
 
-# Step 41 - gnn_train_step (not yet solved)
-# TODO: implement
+# Step 41 - gnn_train_step
+import torch
+
+def gnn_train_step(params, batch, forward_fn, loss_fn, lr):
+    """
+    Runs a single SGD update for a functional GNN.
+    
+    Args:
+        params (dict): Dictionary of parameter tensors (requires_grad=True).
+        batch (dict): Batched graph data containing targets under the key 'y'.
+        forward_fn (callable): Function signature (params, batch) -> predictions.
+        loss_fn (callable): Function signature (predictions, targets) -> scalar loss.
+        lr (float): Learning rate.
+        
+    Returns:
+        dict: A dictionary containing the 'loss' (float) and the updated 'params'.
+    """
+    # 0. Zero out any existing gradients from previous steps
+    for p in params.values():
+        if p.grad is not None:
+            p.grad.zero_()
+            
+    # 1. Forward Pass
+    predictions = forward_fn(params, batch)
+    
+    # 2. Compute Loss
+    targets = batch['y']
+    loss = loss_fn(predictions, targets)
+    
+    # 3. Backward Pass (calculates p.grad for all parameters)
+    loss.backward()
+    
+    # 4. SGD Parameter Update
+    # We must use torch.no_grad() so PyTorch doesn't track this update step!
+    with torch.no_grad():
+        for p in params.values():
+            if p.grad is not None:
+                # In-place subtraction: p = p - (lr * gradient)
+                p.sub_(lr * p.grad)
+                
+    return {
+        'loss': loss.item(),
+        'params': params
+    }
 
 # Step 42 - train_node_classifier (not yet solved)
 # TODO: implement
