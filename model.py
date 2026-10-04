@@ -1231,8 +1231,32 @@ def accuracy_metric(logits, targets):
     # 4. Extract the standard Python float using .item()
     return accuracy.item()
 
-# Step 40 - mae_metric (not yet solved)
-# TODO: implement
+# Step 40 - mae_metric
+import torch
+import torch.nn.functional as F
+
+def mae_metric(predictions, targets):
+    """
+    Computes the mean absolute error between continuous predictions and targets.
+    
+    Args:
+        predictions (Tensor): Predicted values of shape [B] or [B, 1].
+        targets (Tensor): True target values of shape [B] or [B, 1].
+        
+    Returns:
+        float: The mean absolute error as a standard Python float.
+    """
+    # 1. Flatten both tensors to 1-D to prevent silent broadcasting bugs
+    preds_flat = predictions.view(-1)
+    targets_flat = targets.view(-1)
+    
+    # 2. Compute the element-wise absolute difference and take the mean
+    # You can do this manually: torch.abs(preds_flat - targets_flat).mean()
+    # Or use PyTorch's highly optimized L1 loss function:
+    mae = F.l1_loss(preds_flat, targets_flat, reduction='mean')
+    
+    # 3. Extract the standard Python float using .item()
+    return mae.item()
 
 # Step 41 - gnn_train_step (not yet solved)
 # TODO: implement
