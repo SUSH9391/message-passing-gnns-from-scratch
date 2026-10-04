@@ -293,8 +293,57 @@ def gcn_linear_transform(node_features, weight, bias=None):
     return out
     pass
 
-# Step 16 - gcn_layer_forward (not yet solved)
-# TODO: implement
+# Step 16 - gcn_layer_forward
+import torch
+
+def gcn_layer_forward(node_features, src, dst, weight, bias=None, num_nodes=None, activation=None):
+    """Forward pass of one GCN layer: renormalize, transform, propagate.
+
+    Args:
+        node_features: FloatTensor of shape (N, Fin).
+        src: LongTensor of shape (E,) source indices.
+        dst: LongTensor of shape (E,) destination indices.
+        weight: FloatTensor of shape (Fin, Fout).
+        bias: optional FloatTensor of shape (Fout,).
+        num_nodes: optional int N; defaults to node_features.shape[0].
+        activation: optional callable applied to the output.
+
+    Returns:
+        FloatTensor of shape (N, Fout).
+    """
+    # 1. Default num_nodes if not provided
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+        
+    # 2. Apply GCN renormalization (adds self-loops and computes symmetric normalization weights)
+    src_loop, dst_loop, edge_weights = gcn_renormalize_adjacency(src, dst, num_nodes)
+    
+    # 3. Apply linear feature transformation (XW + b)
+    transformed_features = gcn_linear_transform(node_features, weight, bias)
+    
+    # 4. Define message function and update function for propagation
+    def gcn_message_fn(x_src, x_dst, weights):
+        return x_src * weights.unsqueeze(-1)
+        
+    def gcn_update_fn(node_feats, aggregated):
+        return aggregated
+        
+    # 5. Run message passing layer
+    out = message_passing_layer(
+        transformed_features,
+        src_loop,
+        dst_loop,
+        message_fn=gcn_message_fn,
+        update_fn=gcn_update_fn,
+        aggr='sum',
+        edge_attr=edge_weights
+    )
+    
+    # 6. Apply optional activation function (e.g., ReLU)
+    if activation is not None:
+        out = activation(out)
+        
+    return out
 
 # Step 17 - init_gcn_parameters (not yet solved)
 # TODO: implement
