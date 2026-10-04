@@ -1150,8 +1150,34 @@ def collate_graph_batch(graph_list):
         'y': batched_y
     }
 
-# Step 37 - cross_entropy_loss (not yet solved)
-# TODO: implement
+# Step 37 - cross_entropy_loss
+import torch
+import torch.nn.functional as F
+
+def cross_entropy_loss(logits, targets):
+    """
+    Computes the mean multi-class cross-entropy between predicted scores and labels.
+    
+    Args:
+        logits (Tensor): Unnormalized scores of shape (M, C).
+        targets (LongTensor): Class indices in {0, ..., C-1} of shape (M,).
+        
+    Returns:
+        Tensor: 0-dimensional scalar float tensor representing the mean loss.
+    """
+    # PyTorch's built-in cross_entropy elegantly handles the softmax 
+    # and the log simultaneously for perfect numerical stability!
+    loss = F.cross_entropy(logits, targets, reduction='mean')
+    
+    return loss
+
+# --- Optional: Manual Implementation for learning ---
+# def manual_cross_entropy(logits, targets):
+#     M = logits.shape[0]
+#     log_probs = F.log_softmax(logits, dim=-1)
+#     # Pluck out the log probability of the true correct class for each example
+#     correct_class_log_probs = log_probs[torch.arange(M), targets]
+#     return -correct_class_log_probs.mean()
 
 # Step 38 - mse_loss (not yet solved)
 # TODO: implement
