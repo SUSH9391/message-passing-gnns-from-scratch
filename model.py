@@ -917,8 +917,43 @@ def graph_regression_head(graph_embeddings, weight, bias=None):
         
     return predictions
 
-# Step 32 - generate_sbm_graph (not yet solved)
-# TODO: implement
+# Step 32 - generate_sbm_graph
+import torch
+
+def generate_sbm_graph(num_nodes, num_classes, p_in, p_out, feature_dim, seed=None):
+    if seed is not None:
+        torch.manual_seed(seed)
+        
+    # Generate node features
+    node_features = torch.randn(num_nodes, feature_dim)
+    
+    # Assign node labels in contiguous blocks
+    node_labels = torch.zeros(num_nodes, dtype=torch.long)
+    for c in range(num_classes):
+        start = c * num_nodes // num_classes
+        end = (c + 1) * num_nodes // num_classes
+        node_labels[start:end] = c
+        
+    # Generate edges
+    src = []
+    dst = []
+    for i in range(num_nodes):
+        for j in range(i + 1, num_nodes):
+            prob = p_in if node_labels[i] == node_labels[j] else p_out
+            if torch.rand(1).item() < prob:
+                # Add both directions of the undirected edge immediately
+                src.extend([i, j])
+                dst.extend([j, i])
+                
+    # Create edge index tensor (will automatically be [2, 0] if lists are empty)
+    edge_index = torch.tensor([src, dst], dtype=torch.long)
+    
+    return {
+        'node_features': node_features,
+        'edge_index': edge_index,
+        'node_labels': node_labels,
+        'num_nodes': num_nodes
+    }
 
 # Step 33 - build_node_classification_dataset (not yet solved)
 # TODO: implement
