@@ -655,8 +655,66 @@ def gat_layer_forward(node_features, src, dst, param_list, merge_mode='concat', 
         
     return merged_out, all_attn
 
-# Step 24 - init_gat_parameters (not yet solved)
-# TODO: implement
+# Step 24 - init_gat_parameters
+import torch
+import math
+
+def init_gat_parameters(in_dim, out_dim, num_heads, with_bias=True, seed=None):
+    """
+    Initializes parameters for a multi-head GAT layer using Glorot uniform initialization.
+    
+    Args:
+        in_dim (int): Input feature dimension.
+        out_dim (int): Output feature dimension per head.
+        num_heads (int): Number of independent attention heads.
+        with_bias (bool): Whether to include a bias vector.
+        seed (int, optional): Random seed for reproducibility.
+        
+    Returns:
+        list of dict: A list of length `num_heads`, each containing 'weight', 
+                      'attn_src', 'attn_dst', and optionally 'bias' as float32 tensors with requires_grad=True.
+    """
+    if seed is not None:
+        torch.manual_seed(seed)
+        
+    # Calculate bounds for Glorot uniform initialization
+    bound_w = math.sqrt(6.0 / (in_dim + out_dim))
+    bound_a = math.sqrt(6.0 / (out_dim + 1))
+    
+    param_list = []
+    
+    for _ in range(num_heads):
+        # 1. Initialize weight matrix
+        weight = torch.empty(in_dim, out_dim, dtype=torch.float32)
+        weight.uniform_(-bound_w, bound_w)
+        weight.requires_grad = True
+        
+        # 2. Initialize source attention vector
+        attn_src = torch.empty(out_dim, dtype=torch.float32)
+        attn_src.uniform_(-bound_a, bound_a)
+        attn_src.requires_grad = True
+        
+        # 3. Initialize destination attention vector
+        attn_dst = torch.empty(out_dim, dtype=torch.float32)
+        attn_dst.uniform_(-bound_a, bound_a)
+        attn_dst.requires_grad = True
+        
+        # Pack into a dictionary
+        params = {
+            'weight': weight,
+            'attn_src': attn_src,
+            'attn_dst': attn_dst
+        }
+        
+        # 4. Initialize optional bias
+        if with_bias:
+            bias = torch.zeros(out_dim, dtype=torch.float32)
+            bias.requires_grad = True
+            params['bias'] = bias
+            
+        param_list.append(params)
+        
+    return param_list
 
 # Step 25 - gat_stack_forward (not yet solved)
 # TODO: implement
