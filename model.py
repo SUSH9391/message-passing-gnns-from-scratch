@@ -1356,8 +1356,65 @@ def train_node_classifier(params, dataset, forward_fn, num_epochs=100, lr=0.01, 
         'params': params
     }
 
-# Step 43 - train_graph_regressor (not yet solved)
-# TODO: implement
+# Step 43 - train_graph_regressor
+import torch
+
+def train_graph_regressor(params, dataset, forward_fn, num_epochs, lr, batch_size=8):
+    """
+    Trains a functional graph regression GNN using mini-batch SGD and evaluates MAE.
+    
+    Args:
+        params (dict): Dictionary of parameter tensors.
+        dataset (list of dict): List of graph dictionaries.
+        forward_fn (callable): Function signature (params, batch) -> predictions.
+        num_epochs (int): Number of training epochs.
+        lr (float): Learning rate.
+        batch_size (int, optional): Mini-batch size. Defaults to 8.
+        
+    Returns:
+        tuple: (history, params) where history contains 'loss' and 'mae' lists.
+    """
+    history = {'loss': [], 'mae': []}
+    num_samples = len(dataset)
+    
+    for epoch in range(num_epochs):
+        # 1. Shuffle dataset indices at the start of each epoch for stochasticity
+        permutation = torch.randperm(num_samples).tolist()
+        epoch_losses = []
+        
+        # 2. Iterate through the dataset in mini-batches
+        for i in range(0, num_samples, batch_size):
+            batch_indices = permutation[i:i + batch_size]
+            batch_graphs = [dataset[idx] for idx in batch_indices]
+            
+            # Collate the mini-batch into a single disconnected mega-graph
+            batched_data = collate_graph_batch(batch_graphs)
+            
+            # Run the training step using our shared SGD trainer and MSE loss
+            step_result = gnn_train_step(
+                params=params,
+                batch=batched_data,
+                forward_fn=forward_fn,
+                loss_fn=mse_loss,
+                lr=lr
+            )
+            
+            # Update parameters and record batch loss
+            params = step_result['params']
+            epoch_losses.append(step_result['loss'])
+            
+        # 3. Compute full-dataset MAE at the end of the epoch for evaluation
+        full_batch = collate_graph_batch(dataset)
+        with torch.no_grad():
+            preds = forward_fn(params, full_batch)
+            epoch_mae = mae_metric(preds, full_batch['y'])
+            
+        # Record mean training loss and full-dataset MAE
+        mean_epoch_loss = sum(epoch_losses) / len(epoch_losses) if epoch_losses else 0.0
+        history['loss'].append(mean_epoch_loss)
+        history['mae'].append(epoch_mae)
+        
+    return history, params
 
 # Step 44 - representation_similarity (not yet solved)
 # TODO: implement
