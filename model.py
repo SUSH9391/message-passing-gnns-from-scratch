@@ -378,8 +378,56 @@ def init_gcn_parameters(in_dim, out_dim, with_bias=True, seed=None):
         
     return params
 
-# Step 18 - gcn_stack_forward (not yet solved)
-# TODO: implement
+# Step 18 - gcn_stack_forward
+import torch
+
+def gcn_stack_forward(node_features, src, dst, param_list, activations=None, num_nodes=None):
+    """
+    Produces deep node embeddings from a stack of GCN layers.
+    
+    Args:
+        node_features (Tensor): Initial node feature tensor of shape (N, F0).
+        src (LongTensor): Source node indices of shape (E,).
+        dst (LongTensor): Destination node indices of shape (E,).
+        param_list (list of dict): Each dict contains 'weight' (Fin, Fout) 
+                                   and optional 'bias' (Fout,).
+        activations (list of callable or None, optional): Activation function per layer.
+        num_nodes (int, optional): Total number of nodes N. Defaults to node_features.shape[0].
+        
+    Returns:
+        tuple: (embeddings, all_layer_outputs)
+            - embeddings: Final node feature tensor of shape (N, FL).
+            - all_layer_outputs: List of output tensors from every layer in order.
+    """
+    if num_nodes is None:
+        num_nodes = node_features.shape[0]
+        
+    all_layer_outputs = []
+    current_features = node_features
+    
+    # If activations is None, default to None for all layers
+    if activations is None:
+        activations = [None] * len(param_list)
+        
+    for idx, params in enumerate(param_list):
+        weight = params['weight']
+        bias = params.get('bias', None)
+        activation = activations[idx] if idx < len(activations) else None
+        
+        # Run one full GCN layer forward pass
+        current_features = gcn_layer_forward(
+            node_features=current_features,
+            src=src,
+            dst=dst,
+            weight=weight,
+            bias=bias,
+            num_nodes=num_nodes,
+            activation=activation
+        )
+        
+        all_layer_outputs.append(current_features)
+        
+    return current_features, all_layer_outputs
 
 # Step 19 - gat_attention_logits (not yet solved)
 # TODO: implement
