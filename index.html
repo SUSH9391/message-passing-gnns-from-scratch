@@ -93,21 +93,29 @@
           </div>
 
           <div class="hero-stats-row">
+            <!-- Stat 1: Number of building blocks hand-coded from scratch -->
             <div class="hero-stat-item">
               <span class="stat-num">46</span>
               <span class="stat-label">Primitives Implemented</span>
+              <span class="stat-help">46 individual building blocks of a Graph Neural Network coded by hand, step by step, from raw math.</span>
             </div>
+            <!-- Stat 2: Zero reliance on pre-built graph-learning libraries -->
             <div class="hero-stat-item">
               <span class="stat-num">0</span>
               <span class="stat-label">PyG Dependencies</span>
+              <span class="stat-help">No shortcuts. PyTorch Geometric (PyG) is a popular shortcut library, this project uses none of it.</span>
             </div>
+            <!-- Stat 3: All math runs as fast parallel GPU operations, no slow loops -->
             <div class="hero-stat-item">
               <span class="stat-num">100%</span>
               <span class="stat-label">Vectorized Tensor Ops</span>
+              <span class="stat-help">Every calculation runs in parallel on thousands of values at once, the way GPUs are meant to be used.</span>
             </div>
+            <!-- Stat 4: How much better the attention-based model is vs the basic one -->
             <div class="hero-stat-item">
               <span class="stat-num">+31.3%</span>
               <span class="stat-label">GAT Accuracy Advantage</span>
+              <span class="stat-help">The smarter model (GAT) correctly identified 31.3% more data points than the simpler baseline (GCN).</span>
             </div>
           </div>
         </div>
