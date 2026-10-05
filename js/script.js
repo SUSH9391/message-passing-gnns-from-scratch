@@ -241,7 +241,7 @@
     }
 
     renderCanvas();
-    window.updateCanvasTheme = () => {};
+    window.updateCanvasTheme = () => { };
   }
 
   // =========================================================================
@@ -345,7 +345,7 @@
         const x = scaleX(i);
         const y = scaleY(v);
         const displayVal = metricKey === 'accuracy' ? `${(v * 100).toFixed(1)}%` : v.toFixed(4);
-        return `<circle cx="${x}" cy="${y}" r="4.5" class="chart-dot gat-dot" data-epoch="${i+1}" data-val="${displayVal}" data-model="GAT" tabindex="0"></circle>`;
+        return `<circle cx="${x}" cy="${y}" r="4.5" class="chart-dot gat-dot" data-epoch="${i + 1}" data-val="${displayVal}" data-model="GAT" tabindex="0"></circle>`;
       }).join('');
     }
 
@@ -354,7 +354,7 @@
         const x = scaleX(i);
         const y = scaleY(v);
         const displayVal = metricKey === 'accuracy' ? `${(v * 100).toFixed(1)}%` : v.toFixed(4);
-        return `<circle cx="${x}" cy="${y}" r="4.5" class="chart-dot gcn-dot" data-epoch="${i+1}" data-val="${displayVal}" data-model="GCN" tabindex="0"></circle>`;
+        return `<circle cx="${x}" cy="${y}" r="4.5" class="chart-dot gcn-dot" data-epoch="${i + 1}" data-val="${displayVal}" data-model="GCN" tabindex="0"></circle>`;
       }).join('');
     }
 

@@ -95,7 +95,9 @@
 }
 
 /* Global Reset — Zero Horizontal Scrollbar Guaranteed */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -193,7 +195,11 @@ body::before {
 }
 
 /* Titles: Inter for hero and all other sections */
-h1, h2, h3, h4, h5,
+h1,
+h2,
+h3,
+h4,
+h5,
 .display-title,
 .hero-title,
 .section-heading,
@@ -360,9 +366,20 @@ p,
 }
 
 @keyframes pulse-green {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.8; }
+  0% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(0.95);
+    opacity: 0.8;
+  }
 }
 
 .nav-menu {
@@ -523,7 +540,8 @@ p,
 }
 
 .hero-copy {
-  min-width: 0; /* Prevents flex/grid overflow */
+  min-width: 0;
+  /* Prevents flex/grid overflow */
 }
 
 .hero-badge-wrap {
@@ -764,10 +782,23 @@ p,
   max-width: 100%;
 }
 
-.code-keyword { color: #8F5529; font-weight: 600; }
-.code-fn { color: #3E6685; }
-.code-num { color: #2E8B57; }
-.code-comment { color: var(--text-subtle); font-style: italic; }
+.code-keyword {
+  color: #8F5529;
+  font-weight: 600;
+}
+
+.code-fn {
+  color: #3E6685;
+}
+
+.code-num {
+  color: #2E8B57;
+}
+
+.code-comment {
+  color: var(--text-subtle);
+  font-style: italic;
+}
 
 /* ==========================================================================
    BENTO GRID SYSTEM
@@ -804,12 +835,29 @@ p,
   width: 100%;
 }
 
-.bento-col-4 { grid-column: span 4; }
-.bento-col-5 { grid-column: span 5; }
-.bento-col-6 { grid-column: span 6; }
-.bento-col-7 { grid-column: span 7; }
-.bento-col-8 { grid-column: span 8; }
-.bento-col-12 { grid-column: span 12; }
+.bento-col-4 {
+  grid-column: span 4;
+}
+
+.bento-col-5 {
+  grid-column: span 5;
+}
+
+.bento-col-6 {
+  grid-column: span 6;
+}
+
+.bento-col-7 {
+  grid-column: span 7;
+}
+
+.bento-col-8 {
+  grid-column: span 8;
+}
+
+.bento-col-12 {
+  grid-column: span 12;
+}
 
 .bento-card {
   background-color: var(--bg-surface);
@@ -1756,7 +1804,11 @@ p,
     gap: 2.25rem;
   }
 
-  .bento-col-4, .bento-col-5, .bento-col-6, .bento-col-7, .bento-col-8 {
+  .bento-col-4,
+  .bento-col-5,
+  .bento-col-6,
+  .bento-col-7,
+  .bento-col-8 {
     grid-column: span 12;
   }
 
